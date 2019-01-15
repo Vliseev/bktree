@@ -2,8 +2,8 @@ from setuptools import setup, Extension
 
 bktree_module = Extension(
     'bktreelib',
-    sources=["bktree/python_module.cpp"],
-    depends=["bktree/bktree.h","bktree/levenstein_vector.h"],
+    sources=["bktree/python_module wstring.cpp"],
+    depends=["bktree/bktree.h","bktree/levenshtein_wstring.h"],
     extra_compile_args=["-std=c++11","-O0", "-g"]
 )
 
