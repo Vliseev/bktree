@@ -5,11 +5,8 @@
 #ifndef BK_TREE_HPP
 #define BK_TREE_HPP
 
-
-#include <memory>
 #include <map>
-
-#import <iostream>
+#include <memory>
 
 namespace MB {
 
@@ -68,8 +65,6 @@ class bktree_node {
 };
 
 };  // namespace detail
-
-
 
 template <typename T, typename Unit, typename Metric>
 class bktree {

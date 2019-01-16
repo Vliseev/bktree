@@ -20,7 +20,7 @@
 #    define PyInt_FromLong PyLong_FromLong
 #endif
 
-// bktree python object
+// src python object
 
 using result_pair = std::pair<std::vector<uint32_t>, uint32_t>;
 

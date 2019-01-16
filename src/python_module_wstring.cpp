@@ -6,7 +6,9 @@
 
 #include <stdio.h>
 #include <iostream>
+#include <iterator>
 #include <string>
+#include <unordered_set>
 #include "Python.h"
 #include "structmember.h"
 
@@ -22,13 +24,19 @@
 #    define PyInt_FromLong PyLong_FromLong
 #endif
 
-// bktree python object
+// src python object
 
 using result_pair = std::pair<std::wstring, int>;
 
 struct pair_hash {
     size_t operator()(const result_pair &el) const {
         return std::hash<std::wstring>()(el.first);
+    }
+};
+
+struct pair_eq {
+    bool operator()(const result_pair &ls, const result_pair &rs) const {
+        return std::equal_to<std::wstring>()(ls.first, rs.first);
     }
 };
 
@@ -65,23 +73,31 @@ PyObject *vector_to_pylist(const std::vector<uint32_t> &w) {
     return res_list;
 }
 
-PyObject *get_neib_to_python(const std::vector<result_pair> &result,
+template <class ResultIt>
+PyObject *get_neib_to_python(ResultIt __res_begin, ResultIt __res_end,
                              int include_distances) {
-    PyObject *l = PyList_New(result.size());
+    auto res_size = std::distance(__res_begin, __res_end);
+
+    PyObject *l = PyList_New(res_size);
     if (!include_distances) {
-        for (size_t i = 0; i < result.size(); i++)
-            PyList_SetItem(l, i,
-                           PyUnicode_FromWideChar(result[i].first.c_str(),
-                                                  result[i].first.size()));
+        size_t i = 0;
+        while (__res_begin != __res_end) {
+            PyList_SetItem(l, i++,
+                           PyUnicode_FromWideChar(__res_begin->first.c_str(),
+                                                  __res_begin->first.size()));
+            ++__res_begin;
+        }
         return l;
     } else {
-        for (size_t i = 0; i < result.size(); ++i) {
+        size_t i = 0;
+        while (__res_begin != __res_end) {
             PyObject *t = PyTuple_New(2);
             PyTuple_SetItem(t, 0,
-                            PyUnicode_FromWideChar(result[i].first.c_str(),
-                                                   result[i].first.size()));
-            PyTuple_SetItem(t, 1, PyLong_FromUnsignedLong(result[i].second));
-            PyList_SetItem(l, i, t);
+                            PyUnicode_FromWideChar(__res_begin->first.c_str(),
+                                                   __res_begin->first.size()));
+            PyTuple_SetItem(t, 1, PyLong_FromUnsignedLong(__res_begin->second));
+            PyList_SetItem(l, i++, t);
+            ++__res_begin;
         }
     }
     return l;
@@ -130,13 +146,14 @@ static PyObject *py_bk_find_neib(py_bktree *self, PyObject *args,
     std::vector<result_pair> results;
 
     self->ptr->find(w, dist, std::back_inserter(results));
-    l_result = get_neib_to_python(results, include_distances);
+    l_result =
+        get_neib_to_python(results.begin(), results.end(), include_distances);
 
     return l_result;
 }
 
 static PyObject *py_bk_find_list_neib(py_bktree *self, PyObject *args,
-                                 PyObject *kwargs) {
+                                      PyObject *kwargs) {
     PyObject *v;
     PyObject *l_result;
     int dist;
@@ -148,18 +165,43 @@ static PyObject *py_bk_find_list_neib(py_bktree *self, PyObject *args,
                                      &dist, &include_distances))
         return NULL;
 
-    size_t len = PyObject_Size(v);
+    size_t v_size = PyObject_Size(v);
     std::vector<std::wstring> w;
-    w.resize(len);
-    if (len != PyUnicode_AsWideChar(v, const_cast<wchar_t *>(w.data()), len))
-        return NULL;
-    std::vector<result_pair> results;
 
-    self->ptr->find(w, dist, std::back_inserter(results));
-    l_result = get_neib_to_python(results, include_distances);
+    if (PyObject_Size(v) == -1) {
+        char buf[256];
+        snprintf(buf, 256, "Expected an iterable, got an object of type \"%s\"",
+                 v->ob_type->tp_name);
+        PyErr_SetString(PyExc_ValueError, buf);
+        return NULL;
+    }
+    w.resize(v_size);
+
+    for (Py_ssize_t z = 0; z < v_size; z++) {
+        PyObject *key = PyInt_FromLong(z);
+        PyObject *pf = PyObject_GetItem(v, key);
+        size_t len = PyObject_Size(pf);
+        w[z].resize(len);
+        if (len !=
+            PyUnicode_AsWideChar(pf, const_cast<wchar_t *>(w[z].data()), len)) {
+            Py_DECREF(key);
+            Py_DECREF(pf);
+            return NULL;
+        }
+        Py_DECREF(key);
+        Py_DECREF(pf);
+    }
+
+    std::unordered_set<result_pair, pair_hash, pair_eq> results;
+
+    for (const auto &line : w) {
+        self->ptr->find(line, dist, inserter(results, results.begin()));
+    }
+
+    l_result =
+        get_neib_to_python(results.begin(), results.end(), include_distances);
 
     return l_result;
-
 }
 
 static PyMethodDef AnnoyMethods[] = {
@@ -167,11 +209,13 @@ static PyMethodDef AnnoyMethods[] = {
      "add item in tree."},
     {"get_neib", (PyCFunction)py_bk_find_neib, METH_VARARGS | METH_KEYWORDS,
      "get neighbourhood."},
+    {"get_neib_list", (PyCFunction)py_bk_find_list_neib,
+     METH_VARARGS | METH_KEYWORDS, "get neighbourhood for list."},
     {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
 static PyTypeObject PyBKTreeType = {
-    PyVarObject_HEAD_INIT(NULL, 0) "bk_tree.BkTree", /*tp_name*/
+    PyVarObject_HEAD_INIT(NULL, 0) "BkTree", /*tp_name*/
     sizeof(py_bktree),                               /*tp_basicsize*/
     0,                                               /*tp_itemsize*/
     (destructor)py_bk_dealloc,                       /*tp_dealloc*/
@@ -190,7 +234,7 @@ static PyTypeObject PyBKTreeType = {
     0,                                               /*tp_setattro*/
     0,                                               /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,        /*tp_flags*/
-    "annoy objects",                                 /* tp_doc */
+    "bktree objects",                                 /* tp_doc */
     0,                                               /* tp_traverse */
     0,                                               /* tp_clear */
     0,                                               /* tp_richcompare */

@@ -1,14 +1,15 @@
 from setuptools import setup, Extension
 
 bktree_module = Extension(
-    'bktreelib',
-    sources=["bktree/python_module wstring.cpp"],
-    depends=["bktree/bktree.h","bktree/levenshtein_wstring.h"],
+    'bktree.bktreelib',
+    sources=["src/python_module_wstring.cpp"],
+    depends=["src/src.h","src/levenshtein_wstring.h"],
     extra_compile_args=["-std=c++11","-O0", "-g"]
 )
 
 setup(
-    name="bktreelib",
+    name="bktree",
+    packages = ["bktree"],
     description="bktreelib C module",
     ext_modules=[bktree_module]
 )
