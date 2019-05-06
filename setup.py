@@ -4,7 +4,7 @@ bktree_module = Extension(
     'bktree.bktreelib',
     sources=["src/python_module_wstring.cpp"],
     depends=["src/src.h","src/levenshtein_wstring.h"],
-    extra_compile_args=["-std=c++11","-O0", "-g"]
+    extra_compile_args=["-std=c++11","-O3", "-g"]
 )
 
 setup(

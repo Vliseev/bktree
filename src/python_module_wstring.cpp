@@ -125,6 +125,43 @@ static PyObject *py_bk_add_item(py_bktree *self, PyObject *args,
     Py_RETURN_NONE;
 }
 
+static PyObject *py_bk_add_items(py_bktree *self, PyObject *args,
+                                PyObject *kwargs) {
+    PyObject *v;
+    if (!self->ptr) return NULL;
+    static char const *kwlist[] = {"string", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O", (char **)kwlist, &v))
+        return NULL;
+
+    if (PyIter_Check(v)) {
+        char buf[256];
+        snprintf(buf, 256, "Expected an iterable, got an object of type \"%s\"",
+                 v->ob_type->tp_name);
+        PyErr_SetString(PyExc_ValueError, buf);
+        return NULL;
+    }
+    //    if (!check_constraints(self, item, true)) {
+    //        return NULL;
+    //    } TODO: check el in tree
+
+    PyObject *iterator = PyObject_GetIter(v);
+    PyObject *item;
+
+
+    while (item = PyIter_Next(iterator)) {
+        Py_ssize_t len = PyObject_Size(item);
+        std::wstring w;
+        w.resize(len);
+        int size = PyUnicode_AsWideChar(item, const_cast<wchar_t *>(w.data()), len);
+
+        self->ptr->insert(w);  // TODO: add insert p
+        Py_DECREF(item);
+    }
+
+    Py_DECREF(iterator);
+    Py_RETURN_NONE;
+}
+
 static PyObject *py_bk_find_neib(py_bktree *self, PyObject *args,
                                  PyObject *kwargs) {
     PyObject *v;
@@ -207,6 +244,8 @@ static PyObject *py_bk_find_list_neib(py_bktree *self, PyObject *args,
 static PyMethodDef AnnoyMethods[] = {
     {"add_item", (PyCFunction)py_bk_add_item, METH_VARARGS | METH_KEYWORDS,
      "add item in tree."},
+     {"add_items", (PyCFunction)py_bk_add_items, METH_VARARGS | METH_KEYWORDS,
+     "add itterable in tree."},
     {"get_neib", (PyCFunction)py_bk_find_neib, METH_VARARGS | METH_KEYWORDS,
      "get neighbourhood."},
     {"get_neib_list", (PyCFunction)py_bk_find_list_neib,
